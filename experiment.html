@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>中3理科：水圧とゴム膜の実験3D</title>
+    <style>
+        body { margin: 0; background-color: #f0f8ff; font-family: "Helvetica Neue", Arial, sans-serif; }
+        canvas { display: block; }
+        #controls {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            width: 280px;
+        }
+        h2 { margin: 0 0 15px 0; font-size: 18px; color: #333; }
+        .param { margin-bottom: 15px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .data-display { background: #eef; padding: 10px; border-radius: 5px; font-weight: bold; }
+        .hint { font-size: 12px; color: #666; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <h2>実験：水深と水圧</h2>
+    <div class="param">
+        <label>筒の深さ (水面からの距離)</label>
+        <input type="range" id="depthRange" min="0" max="4.5" step="0.05" value="1">
+    </div>
+    <div class="data-display">
+        水深：<span id="depthText">1.00</span> m相当<br>
+        水圧：<span id="pressureText">10</span> hPa相当
+    </div>
+    <div class="hint">
+        ※深くなるほど、水がゴム膜を押し上げる力（水圧）が強くなり、膜が大きくへこみます。
+    </div>
+</div>
+
+<script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+    // --- 初期設定 ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xddf3ff);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(5, 3, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // --- ライト ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    sunLight.position.set(5, 10, 7);
+    scene.add(sunLight);
+
+    // --- 水槽（水） ---
+    const waterGeo = new THREE.BoxGeometry(6, 6, 6);
+    const waterMat = new THREE.MeshPhongMaterial({
+        color: 0x0077ff,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.position.y = -3;
+    scene.add(water);
+
+    // --- 水面の波紋的なプレート ---
+    const surfaceGeo = new THREE.PlaneGeometry(6, 6);
+    const surfaceMat = new THREE.MeshPhongMaterial({ color: 0x0099ff, transparent: true, opacity: 0.3 });
+    const surface = new THREE.Mesh(surfaceGeo, surfaceMat);
+    surface.rotation.x = -Math.PI / 2;
+    scene.add(surface);
+
+    // --- 実験用：筒のグループ ---
+    const experimentGroup = new THREE.Group();
+    scene.add(experimentGroup);
+
+    // 筒本体（透明なプラスチックをイメージ）
+    const tubeGeo = new THREE.CylinderGeometry(0.6, 0.6, 5, 32, 1, true);
+    const tubeMat = new THREE.MeshPhongMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide
+    });
+    const tube = new THREE.Mesh(tubeGeo, tubeMat);
+    experimentGroup.add(tube);
+
+    // ゴム膜（たくさんの頂点を持たせて変形可能にする）
+    const rubberGeo = new THREE.SphereGeometry(0.6, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+    const rubberMat = new THREE.MeshPhongMaterial({ color: 0xff4444, side: THREE.DoubleSide });
+    const rubber = new THREE.Mesh(rubberGeo, rubberMat);
+    // 筒の底に取り付け（初期位置は平ら）
+    rubber.rotation.x = Math.PI; 
+    rubber.position.y = -2.5;
+    experimentGroup.add(rubber);
+
+    // --- 更新処理 ---
+    const depthRange = document.getElementById('depthRange');
+    const depthText = document.getElementById('depthText');
+    const pressureText = document.getElementById('pressureText');
+
+    function update() {
+        const depth = parseFloat(depthRange.value);
+        
+        // 筒の位置（y=0が水面）
+        experimentGroup.position.y = 2.5 - depth;
+
+        // ゴム膜の変形（水圧によるへこみ）
+        // 深さに比例して、球体の縦方向のスケールを平らに、あるいは逆方向に潰す
+        const pressureEffect = Math.max(0.01, depth * 0.4);
+        rubber.scale.set(1, pressureEffect, 1);
+        
+        // 数値表示
+        depthText.innerText = depth.toFixed(2);
+        pressureText.innerText = Math.round(depth * 98); // 簡易計算 P=ρgh
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(update);
+    }
+
+    // カメラの回転（マウスで視点を変えられるように簡易実装）
+    window.addEventListener('mousemove', (e) => {
+        if (e.buttons === 1) {
+            scene.rotation.y += e.movementX * 0.01;
+        }
+    });
+
+    update();
+
+    // リサイズ対応
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
