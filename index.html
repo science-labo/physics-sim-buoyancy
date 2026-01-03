@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>3D水圧実験シミュレーター</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.8); padding: 15px; border-radius: 8px; }
+        .label { font-weight: bold; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <div class="label">筒の深さを変える</div>
+    <input type="range" id="depthSlider" min="0" max="5" step="0.1" value="1" style="width: 200px;">
+    <div id="info">
+        <p>水深: <span id="depthVal">1.0</span> m相当</p>
+        <p>ゴム膜への圧力: <span id="pressureVal">低</span></p>
+    </div>
+    <p style="font-size: 12px; color: #555;">※深くなるほどゴム膜が大きくへこみます</p>
+</div>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+
+    // シーン・カメラ・レンダラーの設定
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f0f0);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // 光源
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(5, 5, 5).addTo(scene);
+    scene.add(new THREE.AmbientLight(0x404040));
+
+    // 水槽（透明な箱）
+    const waterGeo = new THREE.BoxGeometry(6, 6, 6);
+    const waterMat = new THREE.MeshPhongMaterial({ color: 0x00aaff, transparent: true, opacity: 0.3 });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.position.y = -3;
+    scene.add(water);
+
+    // 筒（透明なシリンダー）
+    const tubeGroup = new THREE.Group();
+    const tubeGeo = new THREE.CylinderGeometry(0.5, 0.5, 3, 32, 1, true);
+    const tubeMat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+    const tube = new THREE.Mesh(tubeGeo, tubeMat);
+    tubeGroup.add(tube);
+
+    // ゴム膜（平面を細かく分割して変形可能にする）
+    const rubberGeo = new THREE.CircleGeometry(0.5, 32);
+    const rubberMat = new THREE.MeshPhongMaterial({ color: 0xff5555, side: THREE.DoubleSide });
+    const rubber = new THREE.Mesh(rubberGeo, rubberMat);
+    rubber.rotation.x = Math.PI / 2;
+    rubber.position.y = -1.5; // 筒の底に配置
+    tubeGroup.add(rubber);
+
+    scene.add(tubeGroup);
+
+    camera.position.set(4, 2, 6);
+    camera.lookAt(0, -2, 0);
+
+    // スライダー連動処理
+    const slider = document.getElementById('depthSlider');
+    const depthVal = document.getElementById('depthVal');
+    const pressureVal = document.getElementById('pressureVal');
+
+    function updateSimulation() {
+        const depth = parseFloat(slider.value);
+        
+        // 筒の位置を動かす
+        tubeGroup.position.y = -depth + 1.5;
+
+        // ゴム膜のへこみを再現（中央の頂点を盛り上げる）
+        // 簡易的にスケールと位置で「へこみ」を表現
+        const pressFactor = depth * 0.15;
+        rubber.scale.set(1, 1, 1 + pressFactor * 2); 
+        rubber.position.y = -1.5 + pressFactor;
+
+        // テキスト更新
+        depthVal.innerText = depth.toFixed(1);
+        pressureVal.innerText = depth > 3.5 ? "非常に強い" : (depth > 1.5 ? "強い" : "弱い");
+    }
+
+    slider.addEventListener('input', updateSimulation);
+    updateSimulation();
+
+    // アニメーションループ
+    function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    // リサイズ対応
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+</body>
+</html>
